@@ -1,0 +1,30 @@
+{
+  "##_COMMENT_1##": "INPUTS",
+  "pasec.ref": "/path/to/references/pf3d7_genome.fasta",
+  "pasec.amplicons": ["csp", "sera2"],
+  "pasec.output_dir": "/path/to/analysis/",
+  "pasec.bam_paths_file": "/path/to/data/aligned_bam_paths.txt",
+  "pasec.run_seq_metadata": "/path/to/metadata/solexa_key.csv",
+  "pasec.run_sample_metadata": "/path/to/metadata/sample_key.csv",
+  "pasec.amplicon_bed_file": "/path/to/references/amplicon_coordinates.bed",
+  "pasec.amplicon_bed_index_map": {"sera2": "1", "csp": "2"},
+  "pasec.known_haplotypes": "/path/to/mock_sample_haplotypes.tsv",
+
+  "##_COMMENT_2##": "TOOLS",
+  "pasec.path_to_flash": "/path/to/tools/FLASH-1.2.11/flash",
+  "pasec.generate_haplotypes_script_path": "/path/to/code/pasec/src/generate_haplotypes/generate_haplotypes.rb",
+  "pasec.run_analysis_script_path": "/path/to/code/pasec/src/process_haplotypes/process_haplotypes.py",
+
+  "##_COMMENT_3##": "ALIGNMENT",
+  "pasec.realign": false,
+  "pasec.bwa_aligner": "mem",
+
+  "##_COMMENT_4##": "FILTERING/CLUSTERING",
+  "pasec.min_haplotype_cov": {"csp": 2, "sera2": 2},
+  "pasec.haplotype_cluster_dist": {"csp": 1, "sera2": 1},
+  "pasec.min_haplotype_freq": {"csp": 0.01, "sera2": 0.005},	
+  "pasec.haplotype_cluster_cov_ratio": {"csp": 0.15, "sera2": 0.15},
+  "pasec.analyze_run.min_population_freq": 0.0005, 
+  
+  "pasec.analyze_run.run_id": "validation"
+}
