@@ -13,12 +13,13 @@
 
 import os
 import argparse
-import numpy as np
-import pandas as pd
+#import numpy as np
+#import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-exec(open('/seq/plasmodium/tfarrell/rtss/code/amp_seq/src/haplotype_analysis/utilities.py').read())
+curr_dir = os.path.dirname(os.path.realpath(__file__))
+exec(open(os.path.join(curr_dir, '../process_haplotypes/utilities.py').read()))
 
 # methods 
 def min_freq(freqs): 

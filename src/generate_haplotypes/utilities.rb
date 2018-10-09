@@ -386,7 +386,7 @@ def get_haplotype_set(bam_file, locus, min_read_coverage, min_read_freq, min_map
   #haplotype_set = haplotype_set.map{|read| read.update({:padded_seq => get_aligned_seq(read[:seq], read[:padded_cigar], locus, read[:pos], trim_to=nil)})}
   # sort reads by coverage
   #haplotype_set.sort!{|r_i, r_j| r_j[:coverage] <=> r_i[:coverage]}
-  puts "top 10 unclustered reads:" if verbose
+  puts "top 10 unclustered haplotypes:" if verbose
   print_haplotypes(haplotype_set[0...10], locus, '-----') if (verbose and not haplotype_set.empty?)
   #if verbose
   #  haplotype_set.each{|read| puts read} 

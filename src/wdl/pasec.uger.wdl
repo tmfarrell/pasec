@@ -33,6 +33,7 @@ workflow pasec {
 	Array[String] amplicons
 	File run_seq_metadata
 	File run_sample_metadata
+	File? mask_file
 	File? known_haplotypes
 	Map[String, String] amplicon_bed_index_map
 
@@ -55,8 +56,6 @@ workflow pasec {
 
 	# workflow control
 	Boolean realign
-	#Boolean generate_haplotypes
-	#Boolean perform_run_analysis
 
 	# parse bam_paths_file 
 	Array[File] bam_paths = read_lines(bam_paths_file) 
@@ -106,7 +105,8 @@ workflow pasec {
 			bed = amplicon_bed_file,
 			bam_paths = aligned_bams,
 			bwa_aligner = bwa_aligner,  
-			output_dir = (output_dir + "/raw"),
+			output_dir = (output_dir + "/haplotypes"),
+			mask_file = mask_file, 
 			print_reads = print_reads, 
 			bed_index = amplicon_bed_index_map[amplicon],
 			min_haplotype_cov = min_haplotype_cov[amplicon],
@@ -122,7 +122,7 @@ workflow pasec {
 			amplicon = amplicon, 
 			seq_metadata = run_seq_metadata,
 			sample_metadata = run_sample_metadata, 
-			output_dir = (output_dir + "/raw"),
+			output_dir = (output_dir + "/haplotypes"),
 			known_haplotypes = known_haplotypes, 
 			amplicon_haplotypes_files = generate_amplicon_haplotypes.haplotypes_files, 
 			analysis_script_path = run_analysis_script_path
@@ -154,7 +154,7 @@ workflow pasec {
 task build_bwa_index { 
      File ref 
 
-     command { 
+     command {
      	     source /broad/software/scripts/useuse
 	     use BWA
 	     bwa index ${ref}
@@ -308,7 +308,7 @@ task analyze_run {
 
 	output { 
 		File seq_index = "${output_dir}/run.${amplicon}.index.tsv"
-		File seq_stats = "${output_dir}/run.${amplicon}.stats.tsv"
+		File? seq_stats = "${output_dir}/run.${amplicon}.stats.tsv"
 		File filter_summary = "${output_dir}/${amplicon}.filter.cluster.summary.tsv"
 		File haplotype_index = "${output_dir}/haplotypes.${amplicon}.index.tsv"
 	}
@@ -317,8 +317,8 @@ task analyze_run {
 task pool_amplicon_analyses {
 	String output_dir  
 	Array[File] seq_index_files
-	Array[File] seq_stats_files
-	Array[File] read_metrics_files
+	Array[File?] seq_stats_files
+	Array[File?] read_metrics_files
 	Array[File] filter_summary_files
 	Array[File] haplotype_index_files
 

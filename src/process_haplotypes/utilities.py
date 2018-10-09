@@ -612,9 +612,9 @@ def get_indel_mismatch_freqs(read_stats, amplicon=None):
     return(pd.concat([indel_freqs[['I','D']], mismatch_freqs['X']], axis=1))
 
 ## metadata 
-def  parse_run_haplotype_coverage_file(path): 
+def  parse_run_haplotype_coverage_file(path, solexa_id=False): 
     t = pd.read_table(path)
-    t['Solexa_ID'] = t.Solexa_ID.apply(lambda s: s[:13] if len(s) > 13 else s)
+    if solexa_id: t['Solexa_ID'] = t.Solexa_ID.apply(lambda s: s[:13] if len(s) > 13 else s)
     return(t)
 
 def get_sample_metadata(sample_metadata_path, verbose=False):

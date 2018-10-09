@@ -140,21 +140,22 @@ def get_mask_interval_complement(mask_intervals, start_pos, end_pos, replace_w_h
   return((complement + [[curr_pos, end_pos]]).map{|arr| (arr.class == String) ? arr : arr.map{|x| to_nonnegative.call(x)}})
 end
 
-# rename to get_haplotype
-# return haplotype_start_pos as well
+# return haplotype, haplotype_start_pos from read and cigar array 
 def get_aligned_seq(seq, cigar_arr, interval, aligned_start_pos, mask_intervals=[], 
                     trim_to=nil, verbose=false, deletion_char="X")
 =begin
-    Retrieves portion of read seq which aligns to specified genomic interval.
+    Retrieves portion of read seq which aligns to specified genomic interval, with
+    optional masking and trimming.
 
     input: 
       seq :: String : read sequence
       cigar_arr ::  [[count :: Integer, cigar_op :: String]] 
-      locus :: [chrom :: String, [start :: Integer, end :: Integer]]
-      mapped_start: The genomic base pair position which the first base of the read is aligned to.
+      interval :: [chrom :: String, [start :: Integer, end :: Integer]]
+      aligned_start_pos :: Int : start position of alignment.
 
     output: 
       aligned_seq :: String : portion of read sequence aligning to desired interval
+      start_pos :: Int : start pos of haplotype, accounting for trimming/etc. 
 =end
   if ! [nil, 'locus', 'locus_start'].include?(trim_to)
     raise(Exception, "trim_to parameter must be nil, 'locus' or 'locus_start'.")
