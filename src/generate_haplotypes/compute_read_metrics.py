@@ -19,7 +19,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 curr_dir = os.path.dirname(os.path.realpath(__file__))
-exec(open(os.path.join(curr_dir, '../process_haplotypes/utilities.py').read()))
+exec(open(os.path.join(curr_dir, '../process_haplotypes/utilities.py')).read())
 
 # methods 
 def min_freq(freqs): 
