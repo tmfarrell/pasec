@@ -187,7 +187,7 @@ task merge_paired_end_reads {
 			mkdir -p ${merged_dir}
 		fi 
 		# sort bam and bam2fq
-		samtools sort -o ${id}.sorted.bam ${bam}
+		samtools sort -n -o ${id}.sorted.bam ${bam}
 		samtools bam2fq ${id}.sorted.bam > ${id}.raw.fastq
 		# merge
 		${flash} -I ${id}.raw.fastq -o ${id} -d ${merged_dir} -M 200

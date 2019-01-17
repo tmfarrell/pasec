@@ -611,10 +611,11 @@ def get_indel_mismatch_freqs(read_stats, amplicon=None):
     mismatch_freqs = cts_to_freqs(get_mismatch_cts(read_stats, amplicon))
     return(pd.concat([indel_freqs[['I','D']], mismatch_freqs['X']], axis=1))
 
-## metadata 
-def  parse_run_haplotype_coverage_file(path, solexa_id=False): 
+
+## file parsing 
+def  parse_run_haplotype_coverage_file(path): 
     t = pd.read_table(path)
-    if solexa_id: t['Solexa_ID'] = t.Solexa_ID.apply(lambda s: s[:13] if len(s) > 13 else s)
+    assert 'sample_id' in t.columns, "sample_id must be a column in the haplotype coverage file."
     return(t)
 
 def get_sample_metadata(sample_metadata_path, verbose=False):
@@ -630,6 +631,12 @@ def get_sample_metadata(sample_metadata_path, verbose=False):
         print("sample_metadata:\n" + sample_metadata.to_csv(sep='\t'))
     return(sample_metadata)
     
+def parse_metadata_file(metadata_file, verbose=False): 
+    metadata = pd.read_table(metadata_file)
+    assert 'sample_id' in metadata.columns, "sample_id needs to be a valid column in metadata."
+    metadata['sample_index'] = ['S' + str(i) for i in metadata.index.values] 
+    return(metadata)
+
 def get_solexa_metadata(solexa_metadata_path, verbose=False): 
     solexa_metadata = pd.read_csv(solexa_metadata_path)
     assert 'Sample_ID' in solexa_metadata.columns, "Sample_ID needs to be a column in solexa metadata"
@@ -665,18 +672,18 @@ def add_sample_measures(solexa_metadata, sample_metadata, verbose=False):
         print('solexa_metadata after adding sample relations:\n' + str(solexa_metadata.head()))
     return(solexa_metadata)
 
-def add_metadata(solexa_df, solexa_metadata, verbose=False): 
-    print(solexa_df.head())
-    print(solexa_metadata.head())
-    try: 
-        solexa_df = solexa_df.merge(solexa_metadata, on='Solexa_ID', how='left')
-    except: 
-        solexa_df = solexa_df.merge(solexa_metadata, on='solexa_index', how='left')
-    solexa_df = solexa_df.sort_values(['solexa_index','coverage'], ascending=False).reset_index(drop=True)
-    #except: pass
+def add_metadata(df, metadata=None, verbose=False): 
     if verbose: 
-        print('solexa_df after adding metadata:\n' + str(solexa_df.head()))
-    return(solexa_df)
+        print(df.head())
+        if metadata: print(metadata.head())
+    if not metadata: 
+        metadata = pd.DataFrame()
+        metadata['sample_id'] = df.sample_id.unique()
+        metadata['sample_index'] = ['S' + str(i) for i in metadata.index.values]
+    df = df.merge(metadata, on='sample_id', how='left')
+    if verbose: 
+        print('after adding metadata:\n' + str(df.head()))
+    return(df)
 
 def add_false_negative_haplotype_fields(solexa_hs, hs): 
     solexa_hs['strain_to_haplotype'] = (solexa_hs

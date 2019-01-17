@@ -51,9 +51,9 @@ class HaplotypesParser
       opts.on("--bam BAM_FILE", "Path to bam file.") do |bam_file|
         options.bam_file = bam_file
         if bam_file.include? "sorted"
-          options.solexa = File.basename(bam_file, ".sorted.bam")
+          options.sample_id = File.basename(bam_file, ".sorted.bam")
         else
-          options.solexa = File.basename(bam_file, ".bam")
+          options.sample_id = File.basename(bam_file, ".bam")
         end
       end
       opts.on("--bed BED_FILE", 
@@ -121,14 +121,14 @@ class HaplotypesParser
       end
       opts.on("--print_reads", 
               "Print reads along w/ haplotypes. If --print_to 'stdout', will be printed before haplotypes. If --print_to $dir, will be",
-              "printed to its own file $dir/$solexa.$amplicon.reads.tsv.") do |print_reads| 
+              "printed to its own file $dir/$sample_id.$amplicon.reads.tsv.") do |print_reads| 
         options.print_reads = true
       end
 
       opts.separator ""
       opts.separator "Common args:"
       opts.on("--print_to OUT_STREAM", "Out stream to print output to. Either 'stdout' or a valid directory, where if",
-              "valid directory path will output files {solexa}.read.tsv and {solexa}.haplotypes.tsv. Default='stdout'") do |out|
+              "valid directory path will output files {sample_id}.read.tsv and {sample_id}.haplotypes.tsv. Default='stdout'") do |out|
         options.print_to = out
       end
       opts.on_tail("-h", "--help", "Show this message") do
@@ -179,7 +179,8 @@ if ['haplotypes'].include?(command)
     if haplotype_set_filtered == [] or haplotype_set.length == 0
       next
     end
-    ## continue rewriting here
+    # sort haplotype set 
+    haplotype_set.sort!{|x,y| x[:haplotype_idx] <=> y[:haplotype_idx]}
     # run clustering contraction, if enabled 
     if options.run_haplotype_cluster_contraction
       haplotype_set_clustered, clusters = apply_haplotype_cluster_contraction(haplotype_set_filtered, coverage_ratio_threshold=options.haplotype_clustering_coverage_ratio, 
@@ -187,20 +188,17 @@ if ['haplotypes'].include?(command)
                                                                               sum_cluster_coverage=true, collect_subclusters=false, verbose=options.verbose)
       puts "Those then clustered into #{haplotype_set.length} haplotypes, using distance #{options.haplotype_clustering_edit_dist}" +\
       " and minor to major coverage ratio of #{options.haplotype_clustering_coverage_ratio}." if options.verbose
+      # add haplotype_cluster field to haplotype_set
+      # first add it to those haplotypes that were clustered
+      clusters.each{ |cluster, haplotype_indices|
+                     ([[cluster, 0]] + haplotype_indices).each{ |haplotype_idx, _|  haplotype_set[haplotype_idx][:haplotype_cluster] = cluster }
+      }
     end
-    # add haplotype_cluster field to haplotype_set
-    haplotype_set.sort!{|x,y| x[:haplotype_idx] <=> y[:haplotype_idx]}
-    # first add it to those haplotypes that were clustered
-    clusters.each{|cluster, haplotype_indices|
-      ([[cluster, 0]] + haplotype_indices).each{|haplotype_idx, _|
-        haplotype_set[haplotype_idx][:haplotype_cluster] = cluster
-      }
-      }
     # then add it to those that were not clustered
     haplotype_set = haplotype_set.each{|h| (not h.keys.include?(:haplotype_cluster)) ? h.update({:haplotype_cluster => h[:haplotype_idx]}) : h }
     if options.print_reads
-      print_reads(reads, options.solexa, locus, to=options.print_to)
+      print_reads(reads, options.sample_id, locus, to=options.print_to)
     end
-    print_haplotypes(haplotype_set, options.solexa, locus, to=options.print_to, include_read_idx=options.print_reads)
+    print_haplotypes(haplotype_set, options.sample_id, locus, to=options.print_to, include_read_idx=options.print_reads)
   }
 end

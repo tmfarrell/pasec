@@ -67,14 +67,14 @@ def allele_counts_to_str(allele_counts, to_freqs=false)
 end 
 
 ## i/o functions
-def print_run_stats(bam_file, loci, sample_id)
+def print_run_stats(bam_file, loci, solexa)
   chroms = loci.map{|chrom, coords, id, len| chrom} + ["*"]
   run_stats = (`samtools idxstats #{bam_file}`).split("\n")
                                                .map{|line| line.split("\t")}
                                                .select{|chrom,_,mapped,unmapped| chroms.include?(chrom)} 
   #puts "#{run_stats}"
   total_aligned = run_stats.map{|chrom,_,mapped,unmapped| mapped.to_i + unmapped.to_i}.reduce(:+)
-  run_stats_str = (sample_id + "\t" + \
+  run_stats_str = (solexa + "\t" + \
                    run_stats.select{|chrom,_,_,_| chrom == "*"}.map{|_,_,_,unmapped| "total/#{safe_div(unmapped.to_f, total_aligned.to_f)}/#{total_aligned}"}.join() + "\t" +\
                    run_stats.select{|chrom,_,_,_| chrom != "*"}
                             .map{|chrom,_,mapped,unmapped| "#{chrom}/#{safe_div(mapped.to_f, mapped.to_f + unmapped.to_f)}/#{(mapped.to_i + unmapped.to_i)}"}.join("\t"))
@@ -89,7 +89,7 @@ def parse_reads_file(read_file)
   return(reads)
 end 
 
-def print_reads(read_set, sample_id, locus, to='stdout', format='tsv', file_tag='')
+def print_reads(read_set, solexa, locus, to='stdout', format='tsv', file_tag='')
   # prints read set to stdout
   chrom, coords, amplicon = locus
   if ! ['fasta','tsv'].include?(format)
@@ -99,35 +99,35 @@ def print_reads(read_set, sample_id, locus, to='stdout', format='tsv', file_tag=
     raise(Exception, "Invalid out stream. Must be either 'stdout' or valid directory.")
   elsif to != 'stdout'
     if file_tag.empty?
-      #FileUtils.touch(to + "/#{sample_id}.#{amplicon}.reads.#{format}")
-      out = open(to + "/#{sample_id}.#{amplicon}.reads.#{format}", 'w')
+      #FileUtils.touch(to + "/#{solexa}.#{amplicon}.reads.#{format}")
+      out = open(to + "/#{solexa}.#{amplicon}.reads.#{format}", 'w')
     else
-      #FileUtils.touch(to + "/#{sample_id}.#{locus_str}.#{file_tag}.reads.#{format}")
-      out = open(to + "/#{sample_id}.#{locus_str}.#{file_tag}.reads.#{format}", 'w')
+      #FileUtils.touch(to + "/#{solexa}.#{locus_str}.#{file_tag}.reads.#{format}")
+      out = open(to + "/#{solexa}.#{locus_str}.#{file_tag}.reads.#{format}", 'w')
     end
     out.write("")
   end
   if read_set.empty? 
-    FileUtils.touch(to + "/#{sample_id}.#{amplicon}.reads.#{format}")
+    FileUtils.touch(to + "/#{solexa}.#{amplicon}.reads.#{format}")
     return
   end
   read_set.sort!{|x,y| x[:haplotype_idx] <=> y[:haplotype_idx]}
   if format == 'tsv'
-    line = "sample_id\tlocus\tamplicon\tread_idx\thaplotype_idx\tedit_dist\tlen\tcigar\tmismatch\tqual\tread\n"
+    line = "Solexa_ID\tlocus\tamplicon\tread_idx\thaplotype_idx\tedit_dist\tlen\tcigar\tmismatch\tqual\tread\n"
     (to == 'stdout') ? (puts line) : (out.write(line))
     read_set.each{ |read| 
       if read[:mismatch_str] != nil
-        line = "#{sample_id}\t#{read[:chrom]}:#{read[:pos]}\t#{amplicon}\t#{read[:read_idx]}\t#{read[:haplotype_idx]}\t#{read[:edit_dist]}\t#{read[:seq].length}\t" +
+        line = "#{solexa}\t#{read[:chrom]}:#{read[:pos]}\t#{amplicon}\t#{read[:read_idx]}\t#{read[:haplotype_idx]}\t#{read[:edit_dist]}\t#{read[:seq].length}\t" +
           "#{to_cigar_str(read[:cigar])}\t#{read[:mismatch_str]}\t#{read[:qual_str]}\t#{read[:seq]}\n"
       else
-        line = "#{sample_id}\t#{read[:chrom]}\t#{read[:pos]}\t#{amplicon}\t#{read[:read_idx]}\t#{to_cigar_str(read[:cigar])}\t#{read[:seq].length}\t#{read[:seq]}\t#{read[:qual_str]}\n"
+        line = "#{solexa}\t#{read[:chrom]}\t#{read[:pos]}\t#{amplicon}\t#{read[:read_idx]}\t#{to_cigar_str(read[:cigar])}\t#{read[:seq].length}\t#{read[:seq]}\t#{read[:qual_str]}\n"
       end
       (to == 'stdout') ? (puts line) : (out.write(line))
     }
   end
 end 
  
-def print_haplotypes(haplotype_set, sample_id, locus, to='stdout', include_read_idx=false, 
+def print_haplotypes(haplotype_set, solexa, locus, to='stdout', include_read_idx=false, 
                      format='tsv', with_extras=false, file_tag='')
 =begin
     Prints final haplotype set to either STDOUT or the path provided by to, in either 'fasta' or 'tsv' format. 
@@ -143,9 +143,9 @@ def print_haplotypes(haplotype_set, sample_id, locus, to='stdout', include_read_
     raise(Exception, "Invalid out stream. Must be either 'stdout' or valid directory.")
   elsif to != 'stdout'
     if file_tag.empty?
-      out = open(to + "/#{sample_id}.#{amplicon}.haplotypes.#{format}", 'w')
+      out = open(to + "/#{solexa}.#{amplicon}.haplotypes.#{format}", 'w')
     else
-      out = open(to + "/#{sample_id}.#{amplicon}.#{file_tag}.haplotypes.#{format}", 'w')
+      out = open(to + "/#{solexa}.#{amplicon}.#{file_tag}.haplotypes.#{format}", 'w')
     end
     out.write("")
   end
@@ -153,33 +153,33 @@ def print_haplotypes(haplotype_set, sample_id, locus, to='stdout', include_read_
   haplotype_set.sort!{|x, y| y[:coverage] <=> x[:coverage]}
   if format == 'tsv'
     if include_read_idx != false
-      line = "sample_id\tlocus\tamplicon\tcoverage\tfreq\tlen\tread_idx\thaplotype_cluster_idx\thaplotype_idx\tpass_coverage\tpass_freq\tpass_len\thaplotype\n"
+      line = "Solexa_ID\tlocus\tamplicon\tcoverage\tfreq\tlen\tread_idx\thaplotype_cluster_idx\thaplotype_idx\tpass_coverage\tpass_freq\tpass_len\thaplotype\n"
     else
-      line = "sample_id\tlocus\tamplicon\tcoverage\tfreq\tlen\thaplotype_cluster_idx\thaplotype_idx\tpass_coverage\tpass_freq\tpass_len\thaplotype\n"
+      line = "Solexa_ID\tlocus\tamplicon\tcoverage\tfreq\tlen\thaplotype_cluster_idx\thaplotype_idx\tpass_coverage\tpass_freq\tpass_len\thaplotype\n"
     end
     (to == 'stdout') ? (puts line) : (out.write(line))
   end
   if haplotype_set.empty?
-    FileUtils.touch(to + "/#{sample_id}.#{amplicon}.haplotypes.#{format}")
+    FileUtils.touch(to + "/#{solexa}.#{amplicon}.haplotypes.#{format}")
     return
   end
   haplotype_set.each{ |haplotype|
     #haplotype_locus_str = locus_to_str([haplotype[:chrom], [haplotype[:start], haplotype[:end]]])
     if format == 'fasta'
-      line = ">#{sample_id}__#{haplotype[:haplotype_locus]}__#{haplotype[:coverage]}__#{haplotype[:final_freq]}"+"\n"+haplotype[:haplotype]+'\n'
+      line = ">#{solexa}__#{haplotype[:haplotype_locus]}__#{haplotype[:coverage]}__#{haplotype[:final_freq]}"+"\n"+haplotype[:haplotype]+'\n'
     elsif format == 'tsv'
       if ! with_extras
         if include_read_idx
-          line = "#{sample_id}\t#{haplotype[:haplotype_locus]}\t#{amplicon}\t#{haplotype[:coverage]}\t#{haplotype[:final_freq].round(8)}\t#{haplotype[:haplotype_len]}\t" + 
+          line = "#{solexa}\t#{haplotype[:haplotype_locus]}\t#{amplicon}\t#{haplotype[:coverage]}\t#{haplotype[:final_freq].round(8)}\t#{haplotype[:haplotype_len]}\t" + 
             "#{haplotype[:read_idx]}\t#{haplotype[:haplotype_cluster]}\t#{haplotype[:haplotype_idx]}\t#{bool_to_int(haplotype[:passed_coverage_filter])}\t" + 
             "#{bool_to_int(haplotype[:passed_freq_filter])}\t#{bool_to_int(haplotype[:passed_haplotype_len_filter])}\t#{haplotype[:haplotype]}\n"
         else 
-          line = "#{sample_id}\t#{haplotype[:haplotype_locus]}\t#{amplicon}\t#{haplotype[:coverage]}\t#{haplotype[:final_freq].round(8)}\t#{haplotype[:haplotype_len]}\t" + 
+          line = "#{solexa}\t#{haplotype[:haplotype_locus]}\t#{amplicon}\t#{haplotype[:coverage]}\t#{haplotype[:final_freq].round(8)}\t#{haplotype[:haplotype_len]}\t" + 
             "#{haplotype[:haplotype_cluster]}\t#{haplotype[:haplotype_idx]}\t#{bool_to_int(haplotype[:passed_coverage_filter])}\t" + 
             "#{bool_to_int(haplotype[:passed_freq_filter])}\t#{bool_to_int(haplotype[:passed_haplotype_len_filter])}\t#{haplotype[:haplotype]}\n"
         end
       else
-        line = "#{sample_id}\t#{haplotype_locus_str}\t#{amplicon}\t#{haplotype[:coverage]}\t#{to_freq(haplotype[:coverage],total)}\t"+\
+        line = "#{solexa}\t#{haplotype_locus_str}\t#{amplicon}\t#{haplotype[:coverage]}\t#{to_freq(haplotype[:coverage],total)}\t"+\
                "#{haplotype[:cigars]}\t#{haplotype[:edit_dists]}\t#{haplotype[:mismatches]}\t#{haplotype[:mismatch_strs]}\t#{haplotype[:haplotype].length}\t#{haplotype[:haplotype]}\n"
       end
     end
@@ -188,15 +188,15 @@ def print_haplotypes(haplotype_set, sample_id, locus, to='stdout', include_read_
   out.close() if out
 end
 
-def print_alleles(allele_counts, locus, sample_id, to='stdout')
+def print_alleles(allele_counts, locus, solexa, to='stdout')
   locus_str = locus_to_str(locus)
   if to != 'stdout' and ! File.directory?(to)
     raise(Exception, "Invalid out stream. Must be either 'stdout' or valid directory.")
   elsif to != 'stdout'
-    out = open(to + "/#{sample_id}.#{locus_str}.allele_counts.tsv", 'w')
-    out.write("sample_id\t#{sample_id}\n")
+    out = open(to + "/#{solexa}.#{locus_str}.allele_counts.tsv", 'w')
+    out.write("solexa\t#{solexa}\n")
   else
-    puts "sample_id\t#{sample_id}\n"
+    puts "solexa\t#{solexa}\n"
   end
   chrom, coords, id = locus
   start = coords.first.to_i
@@ -250,8 +250,8 @@ end
 
 def read_haplotype_file(path)
   haplotype_file_lines = File.open(path, 'r').read.split("\n").map{|line| line.split("\t")} 
-  haplotype_set = haplotype_file_lines.map{|sample_id,locus,coverage,freq,haplotype,metrics|
-    {:sample_id => sample_id, :locus => locus, :coverage => coverage.to_i, :freq => freq.to_f, :haplotype => haplotype, :metrics => metrics}}
+  haplotype_set = haplotype_file_lines.map{|solexa,locus,coverage,freq,haplotype,metrics|
+    {:solexa => solexa, :locus => locus, :coverage => coverage.to_i, :freq => freq.to_f, :haplotype => haplotype, :metrics => metrics}}
   return haplotype_set
 end 
 
@@ -350,7 +350,7 @@ def get_haplotype_set(bam_file, locus, min_read_coverage, min_read_freq, min_map
   total_coverage = haplotype_set.select{|read| passed_coverage_filter_idx.include?(read[:haplotype_idx])}
                                 .map{|read| read[:coverage]}.reduce(:+).to_f
   puts "Of those, #{passed_coverage_filter_idx.length} were >= the minimum haplotype coverage #{min_read_coverage}, with total coverage #{total_coverage}." if verbose
-  # then filter reads w/ haplotype shorter than specified min length
+  # then filter reads w/ haplotype shorter than certain length
   haplotype_set = haplotype_set.map{|read| read.update({:passed_haplotype_len_filter => (read[:haplotype].length >= min_haplotype_len.to_i)})}
   passed_len_filter_idx = haplotype_set.select{|read| read[:passed_haplotype_len_filter]}
                                        .map{|read| read[:haplotype_idx]}

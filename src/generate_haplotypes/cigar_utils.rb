@@ -142,7 +142,7 @@ end
 
 # return haplotype, haplotype_start_pos from read and cigar array 
 def get_aligned_seq(seq, cigar_arr, interval, aligned_start_pos, mask_intervals=[], 
-                    trim_to=nil, verbose=false, deletion_char="X")
+                    trim_to=nil, verbose=false, deletion_char="-")
 =begin
     Retrieves portion of read seq which aligns to specified genomic interval, with
     optional masking and trimming.

@@ -13,12 +13,12 @@ def compute_summary(haplotype_cov_df, step):
     return({'step': step, 
             'amplicon': haplotype_cov_df.iloc[0]['amplicon'],
             'total_coverage': haplotype_cov_df.coverage.sum(),
-            'num_solexas': haplotype_cov_df.Solexa_ID.nunique(), 
+            'num_samples': haplotype_cov_df.sample_id.nunique(), 
             'total_num_haplotypes': haplotype_cov_df.haplotype.nunique(),
-            'avg_solexa_coverage': haplotype_cov_df.groupby('Solexa_ID').coverage.sum().mean(),
-            'avg_num_haplotypes': haplotype_cov_df.groupby('Solexa_ID').haplotype.count().mean()})
+            'avg_sample_coverage': haplotype_cov_df.groupby('sample_id').coverage.sum().mean(),
+            'avg_num_haplotypes': haplotype_cov_df.groupby('sample_id').haplotype.count().mean()})
            
-def compute_haplotype_stats(run_haplotype_coverage, run_metadata, sample_metadata, min_population_freq=None):
+def compute_haplotype_stats(run_haplotype_coverage, min_population_freq=None):
     # groupby haplotype
     try: 
         haplotype_index = (run_haplotype_coverage.groupby('haplotype')
@@ -52,25 +52,15 @@ def compute_haplotype_stats(run_haplotype_coverage, run_metadata, sample_metadat
     try: 
         # add run/sample_indices with coverages
         haplotype_index = haplotype_index.merge((run_haplotype_coverage_indexed.groupby('haplotype_index')
-                                                 .apply(lambda df: metrics_to_str(dict(zip(df['solexa_index'], df['coverage']))))
-                                                 .reset_index()
-                                                 .rename(columns={0:'solexa_index'})), on='haplotype_index', how='left')
-        #print haplotype_index
-        haplotype_index = haplotype_index.merge((run_haplotype_coverage_indexed.groupby(['haplotype_index','sample_index'])
-                                                 .coverage.sum().reset_index()
-                                                 .groupby('haplotype_index')
                                                  .apply(lambda df: metrics_to_str(dict(zip(df['sample_index'], df['coverage']))))
                                                  .reset_index()
                                                  .rename(columns={0:'sample_index'})), on='haplotype_index', how='left')
         #print haplotype_index
-        # add sample/ run counts
-        haplotype_index['solexa_ct'] = haplotype_index.solexa_index.apply(lambda s: s.count('/') + 1)
+        # add sample counts
         haplotype_index['sample_ct'] = haplotype_index.sample_index.apply(lambda s: s.count('/') + 1)
-        # add solexa/ sample percents
-        num_solexa = run_metadata['Solexa_ID'].nunique()
-        haplotype_index['solexa_pct'] = haplotype_index.solexa_ct.apply(lambda c: float(c) / num_solexa)
-        num_sample = sample_metadata['Sample_ID'].nunique()
-        haplotype_index['sample_pct'] = haplotype_index.sample_ct.apply(lambda c: float(c) / num_sample)
+        # add sample percents
+        num_samples = run_haplotype_coverage['sample_id'].nunique()
+        haplotype_index['sample_pct'] = haplotype_index.sample_ct.apply(lambda c: float(c) / num_samples)
     except: pass
     # add start pos
     try: 
@@ -80,32 +70,30 @@ def compute_haplotype_stats(run_haplotype_coverage, run_metadata, sample_metadat
     except: pass 
     return(haplotype_index, run_haplotype_coverage_indexed)
 
-def compute_run_haplotype_stats(run_haplotype_coverage_indexed, haplotype_index, run_metadata, sample_metadata, 
-                              amplicon, known_haplotypes=None):
+def compute_run_haplotype_stats(run_haplotype_coverage_indexed, haplotype_index, metadata, 
+                                amplicon, known_haplotypes=None):
     # get data 
-    run_haplotype_stats = (run_haplotype_coverage_indexed.groupby('solexa_index')
-                         .agg({'coverage': np.sum, 
-                               'sample_index': lambda l: to_str(tuple(set(l)))})
-                         .reset_index()[['solexa_index','coverage','sample_index']])
+    run_haplotype_stats = (run_haplotype_coverage_indexed.groupby('sample_index')
+                         .agg({'coverage': np.sum })
+                         .reset_index()[['sample_index','coverage']])
     # add haplotype freqs 
-    run_haplotype_stats = run_haplotype_stats.merge((run_haplotype_coverage_indexed.groupby('solexa_index')
+    run_haplotype_stats = run_haplotype_stats.merge((run_haplotype_coverage_indexed.groupby('sample_index')
                                                      .apply(lambda df: metrics_to_str(cts_dict_to_freqs(dict(zip(df['haplotype_index'].values,
                                                                                                          df['coverage'])))))
                                                      .reset_index()
                                                      .rename(columns={0:'haplotype_freqs'})), 
-                                                    on='solexa_index', how='left')
+                                                    on='sample_index', how='left')
     # add haplotype count 
     run_haplotype_stats['haplotype_ct'] = run_haplotype_stats.haplotype_freqs.apply(lambda s: len(metrics_to_dict(s).keys()))
     ## rewrite: add haplotype mismatch ## 
     # join w/ metadata
-    run_haplotype_stats = run_haplotype_stats.merge(run_metadata[filter(lambda c: c != 'sample_index', run_metadata.columns)], 
-                                                on='solexa_index', how='outer')
+    run_haplotype_stats = run_haplotype_stats.merge(metadata, on='sample_index', how='outer')
     if not known_haplotypes is None and not known_haplotypes.empty:
         try: 
-            # add mock solexa metrics
-            mock_solexas = run_metadata[run_metadata.contents == 'p_falciparum_mock'].solexa_index.values.tolist()
-            haplotype_index['mock_coverage'] = haplotype_index.solexa_index.apply(lambda s: sum(map(lambda (solexa, x): x, 
-                                                                                                    filter(lambda (solexa, x): solexa in mock_solexas, 
+            # add mock sample metrics
+            mock_samples = metadata[metadata.contents == 'p_falciparum_mock'].sample_index.values.tolist()
+            haplotype_index['mock_coverage'] = haplotype_index.sample_index.apply(lambda s: sum(map(lambda (sample, x): x, 
+                                                                                                    filter(lambda (sample, x): sample in mock_samples, 
                                                                                                            metrics_to_dict(s).items()))))
             haplotype_index['frac_mock'] = haplotype_index.apply(lambda row: safe_div(row['mock_coverage'], row['coverage']), axis=1)
             haplotype_index['in_mock'] = haplotype_index.apply(lambda row: 1 if (row['mock_coverage'] > 0) else 0, axis=1)
@@ -118,11 +106,11 @@ def compute_run_haplotype_stats(run_haplotype_coverage_indexed, haplotype_index,
                                                                           on='haplotype_index', how='left')
         # add haplotype indices to run_haplotype_stats, w/ strain assign fields
         for strain_assign_field in strain_assign_fields: 
-            run_haplotype_stats = run_haplotype_stats.merge((run_haplotype_coverage_indexed.groupby('solexa_index')
+            run_haplotype_stats = run_haplotype_stats.merge((run_haplotype_coverage_indexed.groupby('sample_index')
                                                          .apply(lambda df: dict_to_str(dict(zip(df['haplotype_index'].values,
                                                                                                 df[strain_assign_field]))))
                                                          .reset_index()
-                                                         .rename(columns={0:'haplotype_to_' + strain_assign_field})), on='solexa_index', how='left')
+                                                         .rename(columns={0:'haplotype_to_' + strain_assign_field})), on='sample_index', how='left')
             run_haplotype_stats['haplotype_to_' + strain_assign_field] = run_haplotype_stats['haplotype_to_' + strain_assign_field].fillna('/')
             run_haplotype_stats['strains_' + strain_assign_field] = (run_haplotype_stats['haplotype_to_' + strain_assign_field]
                                                                    .apply(lambda s: ';'.join(set([rs.split(':')[1] for rs in s.split('/') if rs]))) # first get strains assigned
@@ -144,18 +132,18 @@ def compute_run_haplotype_stats(run_haplotype_coverage_indexed, haplotype_index,
     try: run_haplotype_stats['haplotype_mismatch'] = run_haplotype_stats['haplotype_mismatch'].fillna("")
     except: pass
     # sort_values by run_index
-    run_haplotype_stats['solexa_index_#'] = run_haplotype_stats['solexa_index'].apply(lambda s: int(s[1:]))
-    run_haplotype_stats = run_haplotype_stats.sort_values('solexa_index_#').reset_index(drop=True)
-    del run_haplotype_stats['solexa_index_#']
+    run_haplotype_stats['sample_index_#'] = run_haplotype_stats['sample_index'].apply(lambda s: int(s[1:]))
+    run_haplotype_stats = run_haplotype_stats.sort_values('sample_index_#').reset_index(drop=True)
+    del run_haplotype_stats['sample_index_#']
     run_haplotype_stats['amplicon'] = [amplicon] * len(run_haplotype_stats.index)
     # include haplotype_to_{strain_assign_field} and {metric}_{strain_assign_field}
     try: 
-        return(run_haplotype_stats[['solexa_index','amplicon','coverage','sample_index'] +\
+        return(run_haplotype_stats[['sample_index','amplicon','coverage'] +\
                                  filter(lambda col: any(map(lambda field: (field in col) and (not 'haplotype' in col), strain_assign_fields)), run_haplotype_stats.columns) +\
                                  filter(lambda col: 'haplotype' in col, run_haplotype_stats.columns)], 
                run_haplotype_coverage_indexed, haplotype_index)
     except: 
-        return(run_haplotype_stats[['solexa_index','amplicon','coverage','sample_index','haplotype_ct','haplotype_freqs']],
+        return(run_haplotype_stats[['sample_index','amplicon','coverage','haplotype_ct','haplotype_freqs']],
                run_haplotype_coverage_indexed, haplotype_index)
 
 ## main 
@@ -164,16 +152,11 @@ def main():
     verbose_parser = argparse.ArgumentParser(add_help=False)
     verbose_parser.add_argument('--verbose', action='store_true', help="Run verbosely.") 
     metadata_parser = argparse.ArgumentParser(add_help=False)
-    #metadata_parser.add_argument('--metadata', required=True, 
-    #                              help="Path to the metadata file. Should be .csv that includes sequencing id and " +\
-    #                                   "its relation w/ other properties of that sequenced sample.")
-    metadata_parser.add_argument('--run_metadata', required=True, 
-                                  help="Path to the sequencing identifiers metadata file. Should be .tsv and include Solexa_ID and Sample_ID relation.")
-    metadata_parser.add_argument('--sample_metadata', required=True, 
-                                  help="Path to the sample metadata file. Should be .tsv.")
+    metadata_parser.add_argument('--metadata_file', 
+                                  help="Path to the metadata file. Should be .tsv that relates sample_id.bam to each sample's attributes.")
     haplotype_coverage_file_parser = argparse.ArgumentParser(add_help=False)
     haplotype_coverage_file_parser.add_argument('--run_haplotype_coverage_file', required=True,
-                                           help="Path to the main data file, a .tsv with 3 columns: Solexa_ID, haplotype and coverage.")
+                                           help="Path to the main data file, a .tsv with 3 columns: sample_id, haplotype and coverage.")
     ## build main parser
     main_parser = argparse.ArgumentParser(parents=[haplotype_coverage_file_parser, metadata_parser, verbose_parser])
     main_parser.add_argument('--output_dir', required=True, help='Directory to save output files to.')
@@ -187,13 +170,14 @@ def main():
     main_parser.add_argument('--no_filter_cluster', action='store_true', 
                              help="Pass this flag to not apply filtering/ clustering.")
     main_parser.add_argument('--compute_run_stats', action='store_true', 
-                             help="Compute statistics for each Solexa_ID.")
+                             help="Compute statistics for each sample_id.")
     ## parse 
     args = main_parser.parse_args()
     ## get metadata 
-    sample_metadata = get_sample_metadata(args.sample_metadata, args.verbose)
-    run_metadata = get_solexa_metadata(args.run_metadata, args.verbose)
-    run_metadata = add_sample_measures(run_metadata, sample_metadata, args.verbose)
+    if args.metadata_file: 
+        metadata = parse_metadata_file(args.metadata_file, args.verbose)
+    else: 
+        metadata = None 
     #metadata = pd.haplotype_csv(args.metadata)
     if args.known_haplotypes_file: 
         known_haplotypes = pd.read_table(args.known_haplotypes_file)
@@ -220,7 +204,7 @@ def main():
         filter_summary = filter_summary + [compute_summary(run_haplotype_coverage, 'after_filtering')]
         # cluster
         run_haplotype_coverage = (run_haplotype_coverage
-                                .groupby(['Solexa_ID','haplotype_cluster_idx'])
+                                .groupby(['sample_id','haplotype_cluster_idx'])
                                 .agg({'freq': np.sum, 
                                       'coverage': np.sum, 
                                       'len': lambda df: df.iloc[0], 
@@ -230,10 +214,10 @@ def main():
                                 .reset_index())
         del run_haplotype_coverage['haplotype_cluster_idx']
         filter_summary = filter_summary + [compute_summary(run_haplotype_coverage, 'after_clustering')]
-    run_haplotype_coverage = add_metadata(run_haplotype_coverage, run_metadata, args.verbose)
+    run_haplotype_coverage = add_metadata(run_haplotype_coverage, metadata, args.verbose)
     # compute haplotype index 
     if args.verbose: print("\tcomputing haplotypes index...")
-    haplotype_index, run_haplotype_coverage_indexed = compute_haplotype_stats(run_haplotype_coverage, run_metadata, sample_metadata, args.min_population_freq)
+    haplotype_index, run_haplotype_coverage_indexed = compute_haplotype_stats(run_haplotype_coverage, args.min_population_freq)
     haplotype_index['amplicon'] = [args.amplicon] * len(haplotype_index.index)
     run_haplotype_coverage_indexed['amplicon'] = [args.amplicon] * len(run_haplotype_coverage_indexed.index)
     run_haplotype_coverage_indexed.to_csv(args.output_dir + '/' + '.'.join(filter(lambda s: s != '', ['run',args.amplicon,args.filename_id,'index.tsv'])), sep='\t')
@@ -245,7 +229,7 @@ def main():
         # compute run haplotype stats
         if args.verbose: print("\tcomputing run haplotype stats...")
         run_haplotype_stats, run_haplotype_coverage_indexed, haplotype_index = \
-            compute_run_haplotype_stats(run_haplotype_coverage_indexed, haplotype_index, run_metadata, sample_metadata, 
+            compute_run_haplotype_stats(run_haplotype_coverage_indexed, haplotype_index, metadata, 
                                         args.amplicon, known_haplotypes)
         run_haplotype_stats.to_csv(args.output_dir + '/' + '.'.join(filter(lambda s: s != '', ['run',args.amplicon,args.filename_id,'stats.tsv'])), sep='\t')
     if not args.no_filter_cluster: 
