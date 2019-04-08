@@ -256,8 +256,8 @@ def read_haplotype_file(path)
 end 
 
 ## main functions 
-def get_haplotype_set(bam_file, locus, min_read_coverage, min_read_freq, min_mapping_quality, max_ref_mismatch, 
-                      max_N_fraction, verbose=false, bwa_aligner_used=nil, mask_intervals=[], trim_to='locus')
+def get_haplotype_set(bam_file, locus, min_read_coverage, min_read_freq, min_mapping_quality, max_ref_mismatch, max_N_fraction, 
+                      verbose=false, bwa_aligner_used=nil, mask_intervals=[], trim_to='locus', deletion_char='-', mask_base="T")
 =begin
    Gets unique set of reads (with metrics) from bam_file within a some locus, with some filtering. 
 
@@ -298,7 +298,8 @@ def get_haplotype_set(bam_file, locus, min_read_coverage, min_read_freq, min_map
   puts "" if verbose
   puts "Compiling haplotypes..." if verbose
   reads = reads.map do |read|
-    aligned_seq, aligned_start = get_aligned_seq(read[:seq], read[:cigar], locus, read[:pos], mask_intervals, trim_to=trim_to, verbose=verbose) 
+    aligned_seq, aligned_start = get_aligned_seq(read[:seq], read[:cigar], locus, read[:pos], mask_intervals, trim_to=trim_to, 
+                                                 verbose=verbose, deletion_char=deletion_char, mask_base=mask_base) 
     read.update({:haplotype => aligned_seq, :haplotype_locus => locus_to_str([read[:chrom], [aligned_start, aligned_start + aligned_seq.length], id, ''], trim_to)})
   end
   unique_read_seqs = reads.map{|read| read[:haplotype]}.uniq

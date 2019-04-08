@@ -18,7 +18,7 @@ def compute_summary(haplotype_cov_df, step):
             'avg_sample_coverage': haplotype_cov_df.groupby('sample_id').coverage.sum().mean(),
             'avg_num_haplotypes': haplotype_cov_df.groupby('sample_id').haplotype.count().mean()})
            
-def compute_haplotype_stats(run_haplotype_coverage, min_population_freq=None):
+def compute_haplotype_stats(run_haplotype_coverage, amplicon, min_population_freq=None):
     # groupby haplotype
     try: 
         haplotype_index = (run_haplotype_coverage.groupby('haplotype')
@@ -34,7 +34,8 @@ def compute_haplotype_stats(run_haplotype_coverage, min_population_freq=None):
     #sys.stderr.write(haplotype_index.to_csv(sep='\t'))
     # sort and add index 
     haplotype_index = haplotype_index.sort_values('coverage', ascending=False).reset_index(drop=True)
-    haplotype_index['haplotype_index'] = map(lambda i: 'H' + str(i), haplotype_index.index.values)
+    haplotype_index['haplotype_index'] = haplotype_index.index.values
+    haplotype_index['amplicon_index'] = [amplicon + '-' + str(i) for i in haplotype_index.index.values]
     # add coverage frequencies
     total_coverage = float(haplotype_index.coverage.sum())
     haplotype_index['freq'] = haplotype_index.coverage.apply(lambda c: float(c) / total_coverage)
@@ -43,9 +44,9 @@ def compute_haplotype_stats(run_haplotype_coverage, min_population_freq=None):
         haplotype_index['pass_population_freq'] = haplotype_index.freq.apply(lambda x: 1 if x > min_population_freq else 0)
     if not min_population_freq is None: 
         # index run_haplotypes with haplotype_index
-        run_haplotype_coverage_indexed = run_haplotype_coverage.merge(haplotype_index[['haplotype','haplotype_index','pass_population_freq']], on='haplotype', how='left')
+        run_haplotype_coverage_indexed = run_haplotype_coverage.merge(haplotype_index[['haplotype','haplotype_index','amplicon_index','pass_population_freq']], on='haplotype', how='left')
     else: 
-        run_haplotype_coverage_indexed = run_haplotype_coverage.merge(haplotype_index[['haplotype','haplotype_index']], on='haplotype', how='left')
+        run_haplotype_coverage_indexed = run_haplotype_coverage.merge(haplotype_index[['haplotype','haplotype_index','amplicon_index']], on='haplotype', how='left')
     del run_haplotype_coverage_indexed['haplotype']
     #haplotype_index['haplotype'] = haplotype_index['haplotype']
     #print run_haplotype_coverage
@@ -89,7 +90,7 @@ def compute_run_haplotype_stats(run_haplotype_coverage_indexed, haplotype_index,
     # join w/ metadata
     run_haplotype_stats = run_haplotype_stats.merge(metadata, on='sample_index', how='outer')
     if not known_haplotypes is None and not known_haplotypes.empty:
-        try: 
+        '''try: 
             # add mock sample metrics
             mock_samples = metadata[metadata.contents == 'p_falciparum_mock'].sample_index.values.tolist()
             haplotype_index['mock_coverage'] = haplotype_index.sample_index.apply(lambda s: sum(map(lambda (sample, x): x, 
@@ -125,6 +126,9 @@ def compute_run_haplotype_stats(run_haplotype_coverage_indexed, haplotype_index,
                                                                                                                      str(row['strains_' + strain_assign_field]).split(';')),
                                                                                               axis=1))
         except: pass
+        '''
+        # rewrite above to deal with list of provided known haplotypes (i.e. truth set) 
+        pass 
     # fill NaNs appropriately
     run_haplotype_stats['coverage'] = run_haplotype_stats['coverage'].fillna(0)
     run_haplotype_stats['haplotype_ct'] = run_haplotype_stats['haplotype_ct'].fillna(0)
@@ -155,7 +159,7 @@ def main():
     metadata_parser.add_argument('--metadata_file', 
                                   help="Path to the metadata file. Should be .tsv that relates sample_id.bam to each sample's attributes.")
     haplotype_coverage_file_parser = argparse.ArgumentParser(add_help=False)
-    haplotype_coverage_file_parser.add_argument('--run_haplotype_coverage_file', required=True,
+    haplotype_coverage_file_parser.add_argument('--input', required=True,
                                            help="Path to the main data file, a .tsv with 3 columns: sample_id, haplotype and coverage.")
     ## build main parser
     main_parser = argparse.ArgumentParser(parents=[haplotype_coverage_file_parser, metadata_parser, verbose_parser])
@@ -163,7 +167,7 @@ def main():
     main_parser.add_argument('--amplicon', required=True, help='Amplicon computing data for.')
     main_parser.add_argument('--known_haplotypes_file', default=None, help='A file listing (amplicon, strain, haplotype) for each known haplotype.')
     main_parser.add_argument('--filename_id', default='', help='Identifier to be added to all filenames.')
-    main_parser.add_argument('--run_id', default=None, help='Identifier to be added to haplotypes.index.fasta.')
+    main_parser.add_argument('--run_id', required=True, help='Prefix to all output files (e.g. "${run_id}.filtered.tsv").')
     main_parser.add_argument('--output_fastas', default=False, action='store_const', const=True, 
                              help='Whether to save ${amplicon}.haplotypes.index.fasta.')
     main_parser.add_argument('--min_population_freq', default=None, type=float, help="Minimum threshold frequency for valid haplotypes in the population.")
@@ -191,7 +195,7 @@ def main():
     else: 
         known_haplotypes = None
     ## get run haplotype coverage data
-    run_haplotype_coverage = parse_run_haplotype_coverage_file(args.run_haplotype_coverage_file)
+    run_haplotype_coverage = parse_run_haplotype_coverage_file(args.input)
     if run_haplotype_coverage.empty: 
         if args.verbose: print("Input run haplotypes file is empty.")
         return
@@ -217,23 +221,29 @@ def main():
     run_haplotype_coverage = add_metadata(run_haplotype_coverage, metadata, args.verbose)
     # compute haplotype index 
     if args.verbose: print("\tcomputing haplotypes index...")
-    haplotype_index, run_haplotype_coverage_indexed = compute_haplotype_stats(run_haplotype_coverage, args.min_population_freq)
+    haplotype_index, run_haplotype_coverage_indexed = compute_haplotype_stats(run_haplotype_coverage, args.amplicon, min_population_freq=args.min_population_freq)
+    # add amplicon as column 
     haplotype_index['amplicon'] = [args.amplicon] * len(haplotype_index.index)
     run_haplotype_coverage_indexed['amplicon'] = [args.amplicon] * len(run_haplotype_coverage_indexed.index)
-    run_haplotype_coverage_indexed.to_csv(args.output_dir + '/' + '.'.join(filter(lambda s: s != '', ['run',args.amplicon,args.filename_id,'index.tsv'])), sep='\t')
-    if not args.run_id is None: 
-        haplotype_index['run'] = [args.run_id] * len(haplotype_index.index)
-    (haplotype_index.to_csv(os.path.join(args.output_dir, '.'.join(filter(lambda s: s != '', ['haplotypes',args.amplicon,args.filename_id,'index.tsv']))), sep='\t', index=False))
-    if args.output_fastas: print_to_fasta(haplotype_index, args.output_dir, args.amplicon, args.filename_id)
+    # save filtered, filtered/indexed and haplotype index data to files 
+    filtered_filename = os.path.join(args.output_dir, '.'.join(filter(lambda s: s != '', [args.run_id,args.amplicon,args.filename_id,'filtered.tsv'])))
+    run_haplotype_coverage.to_csv(filtered_filename, sep='\t', index=False)
+    filtered_idxed_filename = os.path.join(args.output_dir, '.'.join(filter(lambda s: s != '', [args.run_id,args.amplicon,args.filename_id,'filtered.indexed.tsv'])))
+    run_haplotype_coverage_indexed.to_csv(filtered_idxed_filename, sep='\t', index=False)
+    haplotype_index_filename = os.path.join(args.output_dir, '.'.join(filter(lambda s: s != '', [args.run_id,args.amplicon,'haplotypes',args.filename_id,'index.tsv']))) 
+    haplotype_index.to_csv(haplotype_index_filename, sep='\t', index=False)
+    # if output_fastas, save to haplotypes to fasta
+    if args.output_fastas: 
+        print_to_fasta(haplotype_index, args.output_dir, args.amplicon, args.filename_id)
+    # if compute run stats, do so 
     if args.compute_run_stats: 
-        # compute run haplotype stats
         if args.verbose: print("\tcomputing run haplotype stats...")
         run_haplotype_stats, run_haplotype_coverage_indexed, haplotype_index = \
             compute_run_haplotype_stats(run_haplotype_coverage_indexed, haplotype_index, metadata, 
                                         args.amplicon, known_haplotypes)
         run_haplotype_stats.to_csv(args.output_dir + '/' + '.'.join(filter(lambda s: s != '', ['run',args.amplicon,args.filename_id,'stats.tsv'])), sep='\t')
     if not args.no_filter_cluster: 
-        pd.DataFrame(filter_summary).to_csv(os.path.join(args.output_dir, '%s.filter.cluster.summary.tsv' % args.amplicon), sep='\t', index=False)
+        pd.DataFrame(filter_summary).to_csv(os.path.join(args.output_dir, '%s.%s.filter_summary.tsv' % (args.run_id, args.amplicon)), sep='\t', index=False)
     else: 
         pd.DataFrame([compute_summary(run_haplotype_coverage, 'initial')]).to_csv(os.path.join(args.output_dir, '%s.filter.cluster.summary.tsv' % args.amplicon), 
                                                                                 sep='\t', index=False)

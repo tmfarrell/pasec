@@ -41,7 +41,7 @@ def replace_keys(dict_, key_to_new_key):
     return(new_dict)
 
 def metrics_to_str(metrics): 
-    return('/'.join(['%s:%0.4f' % item for item in metrics.items()]))
+    return('/'.join(['%s:%0.4f' % (str(k), float(v)) for k, v in metrics.items()]))
 
 def metrics_to_dict(metrics_str): 
     try: return({k: float(v) for k, v in [s.split(':') for s in metrics_str.split('/')]})
@@ -168,7 +168,7 @@ def to_cigar_str(cigar_arr):
     return(''.join(map(lambda arr: ''.join(map(str, arr)), cigar_arr)))
 
 def cigar_arr_to_long_cigar(cigar_arr): 
-    return(''.join(map(lambda (count, op): op * count, cigar_arr)))
+    return(''.join(map(lambda count_op: count_op[0] * count_op[1], cigar_arr)))
 
 def mismatch_str_to_long_mismatch(mismatch_str): 
     if "/" in mismatch_str: 
@@ -224,9 +224,9 @@ def get_snps(mismatch_str, read, pos_or_base='pos'):
     if not snps:
         return(';')
     elif pos_or_base == 'both':
-        return(';'.join(map(lambda (pos, base): ''.join([str(pos),base]), snps)))
+        return(';'.join(map(lambda snp: ''.join(map(str, snp)), snps)))
     else: #pos_or_base == 'pos': 
-        return(';'.join(map(lambda (pos, base): str(pos), snps)))
+        return(';'.join(map(lambda snp: snp[0], snps)))
     #elif pos_or_base == 'base': 
     #    return(';'.join(map(lambda (pos, base): str(base), snps)))
 
@@ -235,7 +235,7 @@ def get_insertion_positions(cigar_arr):
     for i in range(len(cigar_arr)):  
         count, op = cigar_arr[i]
         if op == "I":  
-            curr_pos = sum(map(lambda (count, op): count, filter(lambda (count, op): op != "I", cigar_arr[:i])))
+            curr_pos = sum(map(lambda count_op: count_op[0], filter(lambda count_op: count_op[1] != "I", cigar_arr[:i])))
             positions = positions + [(curr_pos, count)]
     return(positions)
 
@@ -251,14 +251,14 @@ def get_insertion_position_set(read_stats_cigars, verbose=False):
     return(insert_pos)
 
 def get_insertion_pos_df(read_stats_file):
-    rs_stats = pd.read_table(read_stats_file)
+    rs_stats = pd.read_csv(read_stats_file, sep='\t')
     insertion_positions = get_insertion_position_set(rs_stats.cigar.values.tolist())
-    return(pd.DataFrame(map(lambda (pos, num): 
-                            {'pos':pos, 'num_inserts':num}, insertion_positions),
+    return(pd.DataFrame(map(lambda pos_num: 
+                            {'pos': pos_num[0], 'num_inserts': pos_num[1]}, insertion_positions),
                         columns=['pos', 'num_inserts']))
 
 def parse_insertion_position_set_file(insertion_pos_file, amplicon=None):
-    insertions = pd.read_table(insertion_pos_file)
+    insertions = pd.read_csv(insertion_pos_file, sep='\t')
     if insertions.empty: 
         return([])
     elif amplicon: 
@@ -335,13 +335,13 @@ def get_aligned_seq(seq, cigar_arr, start_pos_delta, trim_to=None,
            "trim_to parameter must be nil, 'locus' or 'locus_start'."
     aligned_seq = ''
     if verbose:  
-        print ""
-        print 'Getting aligned sequence for:' 
-        print 'cigar: ' + str(cigar_arr)
-        print "seq: #{seq.length} #{seq}"
+        print("")
+        print('Getting aligned sequence for:') 
+        print('cigar: ' + str(cigar_arr))
+        print("seq: #{seq.length} #{seq}")
     # build aligned seq
     for count, cigar_op in cigar_arr: 
-        if verbose: print "#{[count, cigar_op]}" 
+        if verbose: print("#{[count, cigar_op]}") 
         if cigar_op in ['M','N','I','S']: 
             aligned_seq += seq[:count]
             seq = seq[count:] 
@@ -351,18 +351,18 @@ def get_aligned_seq(seq, cigar_arr, start_pos_delta, trim_to=None,
             aligned_seq += ''.join(['-'] * count)
         elif cigar_op in ['H']: 
             seq = seq[count:]
-        if verbose: print "aligned_seq so far: #{aligned_seq.length} #{aligned_seq}"
+        if verbose: print("aligned_seq so far: #{aligned_seq.length} #{aligned_seq}")
     # trim it, if applicable
     if trim_to: 
         chrom, coords, id = interval  
-        if verbose: print "aligned seq before trimming: #{aligned_seq} #{aligned_seq.length}" 
+        if verbose: print("aligned seq before trimming: #{aligned_seq} #{aligned_seq.length}") 
         if trim_to == 'locus':
             aligned_seq = aligned_seq[(coords.first - aligned_start_pos):(coords.last - aligned_start_pos)]
         elif trim_to == 'locus_start':
             aligned_seq = aligned_seq[(coords.first - aligned_start_pos):]
-        if verbose: print "aligned seq after trimming: #{aligned_seq} #{aligned_seq.length}" 
+        if verbose: print("aligned seq after trimming: #{aligned_seq} #{aligned_seq.length}")
     else:
-        if verbose: print "aligned seq: #{aligned_seq} #{aligned_seq.length}" 
+        if verbose: print("aligned seq: #{aligned_seq} #{aligned_seq.length}") 
     if remove_T_homopolymers_of_len: 
         aligned_seq = ''.join(re.split('[T]{%s,}' % str(remove_T_homopolymers_of_len), aligned_seq))
     return(aligned_seq)
@@ -426,10 +426,8 @@ def assign_strains_by_label(haplotype_index, solexa_read_stats):
     # learn map from M' -> K, where M' subset of M
     m_to_k_map = OrthogonalMatchingPursuit(n_nonzero_coefs=2)
     m_to_k_map.fit(X, Y) 
-    strain_label_assign = map(lambda (strain, coefs): 
-                              (strain, map(lambda (i, c): (m_idx_to_h[i], c), 
-                                           filter(lambda (i, x): x > 0, enumerate(coefs)))), 
-                              zip(S, m_to_k_map.coef_))
+    strain_label_assign = [(strain, [(m_idx_to_h[i], c) for i, c in [(i, x) for i, x in enumerate(coefs) if x > 0]])
+                           for strain, coefs in zip(S, m_to_k_map.coef_)]
     # label those haplotypes w/ indices in M', as associated strain mapped to K
     for strain, haplotype_indices in strain_label_assign: 
         for hi, coef in haplotype_indices: 
@@ -614,7 +612,7 @@ def get_indel_mismatch_freqs(read_stats, amplicon=None):
 
 ## file parsing 
 def  parse_run_haplotype_coverage_file(path): 
-    t = pd.read_table(path)
+    t = pd.read_csv(path, sep='\t')
     assert 'sample_id' in t.columns, "sample_id must be a column in the haplotype coverage file."
     return(t)
 
@@ -632,7 +630,7 @@ def get_sample_metadata(sample_metadata_path, verbose=False):
     return(sample_metadata)
     
 def parse_metadata_file(metadata_file, verbose=False): 
-    metadata = pd.read_table(metadata_file)
+    metadata = pd.read_csv(metadata_file, sep='\t')
     assert 'sample_id' in metadata.columns, "sample_id needs to be a valid column in metadata."
     metadata['sample_index'] = ['S' + str(i) for i in metadata.index.values] 
     return(metadata)

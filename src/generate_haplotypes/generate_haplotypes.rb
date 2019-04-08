@@ -3,14 +3,13 @@
 require 'pp'
 require 'ostruct'
 require 'optparse'
-#require 'parallel'
 require_relative 'utilities.rb'
 
 # cmd-line parser 
 class AmpliconSeqAnalysisParser
   def self.parse(args) 
     opt_parser = OptionParser.new do |opts| 
-      opts.banner = "\nUsage: amplicon_seq_analysis.rb [haplotypes] [options]\n\n" +
+      opts.banner = "\nUsage: amplicon_seq_analysis.rb haplotypes [options]\n\n" +
                     "Computes haplotype coverage or allele frequencies over a given genomic region." 
 
       opts.separator ""
@@ -31,6 +30,8 @@ class HaplotypesParser
     options.print_to = 'stdout'
     options.print_reads = false
     options.mask_intervals_file = nil
+    options.mask_base = "T"
+    options.deletion_char = "-"
     options.min_haplotype_freq = 0.01
     options.min_haplotype_coverage = 2
     options.max_ref_mismatch = 100
@@ -119,6 +120,14 @@ class HaplotypesParser
               "List of coordinates to mask for each loci. Should be tab-delimited with columns 'chrom','start','end'.") do |mask_file| 
         options.mask_intervals_file = mask_file
       end
+      opts.on("--mask_base MASK_BASE", 
+              "Character to replace masked positions with. Default='T'.") do |mask_base| 
+        options.mask_base = mask_base
+      end
+      opts.on("--deletion_char DELETION_CHAR", 
+              "Character to fill in/ represent deletions. Default='-'.") do |deletion_char| 
+        options.deletion_char = deletion_char
+      end
       opts.on("--print_reads", 
               "Print reads along w/ haplotypes. If --print_to 'stdout', will be printed before haplotypes. If --print_to $dir, will be",
               "printed to its own file $dir/$sample_id.$amplicon.reads.tsv.") do |print_reads| 
@@ -173,7 +182,8 @@ if ['haplotypes'].include?(command)
     # get read set, filtering w/ cmd-line opts
     reads, haplotype_set = get_haplotype_set(options.bam_file, locus, options.min_haplotype_coverage, options.min_haplotype_freq,
                                              options.min_mapping_quality, options.max_ref_mismatch, options.max_N_fraction, 
-                                             options.verbose, options.bwa_aligner_used, mask_intervals[locus.first])
+                                             options.verbose, options.bwa_aligner_used, mask_intervals=mask_intervals[locus.first], 
+                                             trim_to='locus', deletion_char=options.deletion_char, mask_base=options.mask_base)
     # if no reads, go to next locus
     haplotype_set_filtered = haplotype_set.select{|h| h[:passed_filters]}
     if haplotype_set_filtered == [] or haplotype_set.length == 0

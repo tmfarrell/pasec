@@ -102,7 +102,7 @@ def to_padded_long_cigar(long_cigar, insertion_positions, verbose=false)
   return(padded)
 end
 
-def get_seq_intervals(seq, intervals, verbose=false) 
+def join_mask_complement_intervals(seq, intervals, verbose=false) 
   new_seq = ''
   puts "#{intervals}" if verbose
   intervals.each do |interval|
@@ -120,8 +120,8 @@ def get_seq_intervals(seq, intervals, verbose=false)
   return(new_seq)
 end
 
-def get_mask_interval_complement(mask_intervals, start_pos, end_pos, replace_w_homopolymer=false, 
-                                 verbose=false, homopolymer_base="T")
+def get_mask_complement_intervals(mask_intervals, start_pos, end_pos, replace_w_homopolymer=false, 
+                                  verbose=false, mask_base="T")
   complement = []
   curr_pos = start_pos
   to_nonnegative = Proc.new {|x| (x < 0) ? 0 : x }
@@ -130,7 +130,7 @@ def get_mask_interval_complement(mask_intervals, start_pos, end_pos, replace_w_h
   mask_intervals.each{ |start, end_|
     complement = complement + [[curr_pos, start]]
     if replace_w_homopolymer
-      complement = complement + [homopolymer_base * (end_ + 1 - start)]
+      complement = complement + [mask_base * (end_ + 1 - start)]
     end
     curr_pos = end_ + 1
     if curr_pos > end_pos
@@ -142,7 +142,7 @@ end
 
 # return haplotype, haplotype_start_pos from read and cigar array 
 def get_aligned_seq(seq, cigar_arr, interval, aligned_start_pos, mask_intervals=[], 
-                    trim_to=nil, verbose=false, deletion_char="-")
+                    trim_to=nil, verbose=false, deletion_char="-", mask_base="T")
 =begin
     Retrieves portion of read seq which aligns to specified genomic interval, with
     optional masking and trimming.
@@ -200,19 +200,23 @@ def get_aligned_seq(seq, cigar_arr, interval, aligned_start_pos, mask_intervals=
     if trim_to == 'locus'
       start_pos = coords.first - aligned_start_pos
       end_pos = aligned_seq.length - ((aligned_start_pos + aligned_seq.length) - coords.last) + 1
-      mask_interval_complement = get_mask_interval_complement(mask_intervals, start_pos, end_pos, true, verbose)
+      mask_complement_intervals = get_mask_complement_intervals(mask_intervals, start_pos, end_pos, replace_w_homopolymer=true, 
+                                                                verbose=verbose, mask_base=mask_base)
       puts "mask intervals: #{mask_intervals.to_s}" if verbose
-      puts "mask intervals complement: #{mask_interval_complement}" if verbose
+      puts "mask complement intervals: #{mask_complement_intervals}" if verbose
       puts "start_pos, end_pos: #{start_pos.to_s}, #{end_pos.to_s}" if verbose
-      aligned_seq = get_seq_intervals(aligned_seq, mask_interval_complement) 
+      aligned_seq = join_mask_complement_intervals(aligned_seq, mask_complement_intervals) 
     elsif trim_to == 'locus_start'
       start_pos = coords.first - aligned_start_pos
       #mask_intervals = [[0, (coords.first - aligned_start_pos - 1)]] + mask_intervals
-      aligned_seq = get_seq_intervals(aligned_seq, get_mask_interval_complement(mask_intervals, start_pos, aligned_seq.length))
+      aligned_seq = join_mask_complement_intervals(aligned_seq, get_mask_complement_intervals(mask_intervals, start_pos, aligned_seq.length, 
+                                                                                              replace_w_homopolymer=true, verbose=verbose, mask_base=mask_base))
     end
     puts "aligned seq after trimming: #{aligned_seq} #{aligned_seq.length}" if verbose 
     return([aligned_seq, aligned_start_pos])
   end
   puts "aligned seq: #{aligned_seq} #{aligned_seq.length}" if verbose 
-  return([get_seq_intervals(aligned_seq, get_mask_interval_complement(mask_intervals, aligned_seq.length)), aligned_start_pos])
+  return([join_mask_complement_intervals(aligned_seq, get_mask_complement_intervals(mask_intervals, start_pos, aligned_seq.length, 
+                                                                                    replace_w_homopolymer=true, verbose=verbose, mask_base=mask_base)), 
+          aligned_start_pos])
 end 
